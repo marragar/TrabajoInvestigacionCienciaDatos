@@ -1,79 +1,90 @@
-# ResidenciaInvestigacion — Subvenciones BOCYL
+# Subvenciones BOCYL — Análisis de las ayudas a personal investigador en Castilla y León
 
-Análisis de las resoluciones de subvenciones a personal investigador de la Junta de Castilla y León (BOCYL): extracción desde PDF, limpieza, carga en MongoDB, enriquecimiento de campos, tests estadísticos e inferencia.
+Pipeline de datos completo sobre las resoluciones de subvenciones a personal investigador publicadas en el **Boletín Oficial de Castilla y León (BOCYL)**: desde los PDF oficiales hasta el análisis estadístico de si variables como el **género**, la **rama de conocimiento** o el **centro de investigación** están asociadas con que una solicitud sea aceptada.
 
-## Estructura
+El proyecto cubre **10 convocatorias** (2010, 2013, 2014, 2016, 2017, 2018, 2021, 2023, 2024 y 2025) y forma parte de un trabajo de investigación en la Universidad de León.
+
+## Qué hace
 
 ```
-data/
-  raw/pdfs/        PDFs originales de las resoluciones BOCYL (uno por año)
-  raw/csv/         CSV extraído directamente del PDF, sin limpiar (CSV_<año>/anexoN_...)
-  clean/           CSV limpio/parseado, listo para importar a Mongo (CSV_<año>_CLEAN/)
-                   fusiona lo que antes eran las carpetas separadas "CSV_Parseados" y "CSV_Parseados/new"
-  validation/      Muestra de validación manual (muestra_validacion.csv)
-  exports/         Volcados/backups de las colecciones de Mongo en distintos momentos (*.json).
-                   Ningún script del repo los lee — son solo snapshots de referencia.
-  archive/         Copias/duplicados que existían en el repo original, conservados tal cual (no se usan en el pipeline)
-
-src/
-  extraction/      PDF -> CSV crudo (pdfplumber). Los PDF_PATH/OUTPUT_PATH se reconfiguran a mano por año.
-  parsing/         CSV crudo -> CSV limpio, un script por año+anexo (parserRowBOCYL_<año><anexo>.py)
-  database/        Carga de los CSV limpios en MongoDB, y comparación de colecciones
-  enrichment/       Relleno de campos que faltan (Género, Rama) vía LLM local / heurísticas, y su muestra de validación
-  statistics/        Tests de hipótesis (chi-cuadrado, Fisher exacto, ANOVA/t-test) sobre las variables categóricas
-  plotting/           Generación de gráficas descriptivas y de series temporales
-
-outputs/
-  graphs/          Gráficas generadas (PNG) y el .pbix del mosaico
-  reports/         Resultados de los tests estadísticos en Markdown
-
-experiments/       Carpeta de scripts exploratorios/puntuales (antes "SCRIPTS_PRUEBAS"), no forma parte del
-                   pipeline principal: clasificador de Rama por ML (sentence-transformers + SVM), herramientas
-                   de corrección manual, comparativas de colecciones, y gráficas/tests antiguos conservados
-                   como referencia.
-
-notes/             Ideas y variables pendientes para futuro análisis
+PDF oficiales ──► CSV crudo ──► CSV limpio ──► MongoDB ──► Enriquecimiento ──► Tests estadísticos
+ (BOCYL)       pdfplumber    parsers por     Docker      LLM local +          chi², Fisher,
+                             año y anexo                 heurísticas          ANOVA, t-test
+                                                                    └──────► Gráficas
 ```
+
+- **Extracción** de tablas desde PDF con `pdfplumber`, lidiando con formatos distintos cada año, tablas partidas entre páginas y capas de texto fantasma.
+- **Limpieza y normalización** de cada convocatoria a un esquema común (números en formato español, identificadores, notas en distintas escalas, nombres de centros...).
+- **Almacenamiento** en MongoDB, levantado con Docker.
+- **Enriquecimiento** de campos que no vienen en el BOCYL (género, rama) mediante LLMs locales, búsqueda web y un clasificador propio (embeddings + SVM), con muestra de validación manual.
+- **Análisis estadístico**: tests de independencia (chi-cuadrado, Fisher exacto), comparación de medias (t de Welch, ANOVA) con tamaños del efecto y corrección por comparaciones múltiples.
+- **Visualización** de estadística descriptiva y evolución temporal.
+
+## Stack
+
+Python · pdfplumber · MongoDB · Docker · Ollama (LLMs locales) · sentence-transformers · scikit-learn · SciPy · R (vía rpy2) · Power BI
 
 ## Puesta en marcha
 
-1. Levanta MongoDB con Docker:
-   ```
-   cp .env.example .env    # ajusta credenciales si quieres, si no deja las por defecto
-   docker compose up -d
-   ```
-2. Instala las dependencias de Python (idealmente en un venv/conda propio):
-   ```
-   pip install -r requirements.txt
-   ```
-   (`rpy2`, usado por algunos tests estadísticos, necesita además R instalado en el sistema)
-3. Ejecuta los scripts del pipeline en el orden de la sección siguiente.
+**Requisitos:** Python 3, Docker y, para algunos tests estadísticos, R instalado en el sistema (lo usa `rpy2`).
 
-Todos los scripts leen la conexión a Mongo desde `db_config.py`, que a su vez
-lee las variables `MONGO_USER`/`MONGO_PASSWORD`/`MONGO_HOST`/`MONGO_PORT`/`MONGO_DB_NAME`
-de `.env` (con los valores de `.env.example` como default si no hay `.env`).
-`.env` no se sube al repo.
+```bash
+# 1. Levantar MongoDB
+cp .env.example .env        # ajusta las credenciales si quieres
+docker compose up -d
 
-## Pipeline (orden de ejecución)
+# 2. Instalar dependencias (mejor en un entorno virtual)
+pip install -r requirements.txt
+```
 
-1. **`src/extraction/`** — PDF de la resolución → CSV crudo por anexo (`data/raw/pdfs/` → `data/raw/csv/`)
-2. **`src/parsing/`** — CSV crudo → CSV limpio, normalizando columnas y separando campos (`data/raw/csv/` → `data/clean/`)
-3. **`src/database/insertarDatosMongo.py`** — Carga todos los CSV de `data/clean/` en MongoDB
-4. **`src/enrichment/`** — Rellena `Género`/`Rama` cuando faltan (LLM local + búsqueda web), calcula personal contratado
-5. **`src/statistics/`** — Tests de independencia/asociación (chi², Fisher, ANOVA) sobre los datos ya en Mongo
-6. **`src/plotting/`** — Gráficas descriptivas y de evolución temporal, salida en `outputs/graphs/`
+La conexión a MongoDB se centraliza en `db_config.py`, que lee `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_HOST`, `MONGO_PORT` y `MONGO_DB_NAME` desde `.env` (o usa los valores de `.env.example` si no existe). El `.env` no se sube al repositorio.
 
-Todos los scripts que hablan con MongoDB usan la conexión definida en `.env` (ver "Puesta en marcha" más arriba).
+## Pipeline
 
-## Notas sobre nombres corregidos
+Los scripts se ejecutan en este orden:
 
-Al reorganizar se detectaron y corrigieron dos nombres de fichero que no correspondían a su contenido real:
+| Paso | Carpeta | Entrada → Salida | Descripción |
+|------|---------|------------------|-------------|
+| 1 | `src/extraction/` | `data/raw/pdfs/` → `data/raw/csv/` | Extrae las tablas de cada anexo del PDF a CSV. Las rutas se configuran por año dentro del script. |
+| 2 | `src/parsing/` | `data/raw/csv/` → `data/clean/` | Un parser por año y anexo (`parserRowBOCYL_<año><anexo>.py`) que normaliza columnas y separa campos. |
+| 3 | `src/database/` | `data/clean/` → MongoDB | `insertarDatosMongo.py` carga los 10 años de una pasada. Incluye también utilidades para comparar colecciones. |
+| 4 | `src/enrichment/` | MongoDB → MongoDB | Rellena `Género` y `Rama` cuando faltan y calcula el personal contratado. |
+| 5 | `src/statistics/` | MongoDB → `outputs/reports/` | Tests de independencia y de comparación de medias; resultados en Markdown. |
+| 6 | `src/plotting/` | MongoDB → `outputs/graphs/` | Gráficas descriptivas y de series temporales. |
 
-- **`extractorResolucionesBOCYL_multiTabla.py`** (antes `extractorResolucionesBOCYL2018.py`): su `PDF_PATH`/`OUTPUT_PATH` apuntan a `ResolucionBOCYL2017.pdf`, no a 2018.
-- **`src/statistics/test_medias.py`** (antes `testTemporal.py`): no hace ningún análisis temporal/de series — compara medias (t-test/ANOVA) entre grupos categóricos. Su propia salida ya se llamaba `test_medias.md`.
+## Estructura del repositorio
 
-El resto de scripts con nombres poco descriptivos (`a.py`, `aa.py`, `aaa.py`, `bbb.py` en `src/`; `a.py`...`dd.py`, `corregir.py`, `colapsarCol.py`, `graficas.py`, `graficas2.py`, `testFisherChi*.py`, `testItextFail.py` en `experiments/`) se renombraron a nombres que describen lo que hacen, verificado leyendo su código, no solo su nombre anterior.
+```
+├── data/
+│   ├── raw/
+│   │   ├── pdfs/        # Resoluciones originales del BOCYL (una por año)
+│   │   └── csv/         # CSV extraído del PDF, sin limpiar
+│   ├── clean/           # CSV limpio, listo para cargar en MongoDB
+│   ├── validation/      # Muestra de validación manual del enriquecimiento
+│   ├── exports/         # Snapshots de las colecciones de MongoDB (solo referencia)
+│   └── archive/         # Copias antiguas conservadas, fuera del pipeline
+├── src/
+│   ├── extraction/      # PDF → CSV
+│   ├── parsing/         # CSV crudo → CSV limpio
+│   ├── database/        # Carga y comparación de colecciones
+│   ├── enrichment/      # Relleno de Género / Rama
+│   ├── statistics/      # Tests de hipótesis
+│   └── plotting/        # Gráficas
+├── outputs/
+│   ├── graphs/          # Gráficas (PNG) y cuadro de mando de Power BI
+│   └── reports/         # Resultados de los tests en Markdown
+├── experiments/         # Scripts exploratorios fuera del pipeline principal
+├── notes/               # Ideas y variables pendientes de analizar
+├── db_config.py
+├── docker-compose.yml
+├── .env.example
+└── requirements.txt
+```
 
-## Estado de `data/clean/`
+### Sobre `experiments/`
 
-`src/database/insertarDatosMongo.py` ahora escanea toda `data/clean/` (los 10 años). Antes de la reorganización solo escaneaba el subconjunto que vivía en `CSV_Parseados/new` (2010, 2013, 2014, 2016, 2017, 2018); al fusionar esa carpeta con `CSV_Parseados` (2021, 2023, 2024, 2025) en una sola `data/clean/`, el script recoge ahora los 10 años en una sola pasada.
+Scripts exploratorios que no forman parte del pipeline principal, conservados como referencia: el clasificador de rama por machine learning (sentence-transformers + SVM), herramientas de corrección manual, comparativas entre colecciones y versiones antiguas de gráficas y tests.
+
+## Fuente de los datos
+
+Resoluciones de concesión de subvenciones a personal investigador publicadas en el [BOCYL](https://bocyl.jcyl.es/), la fuente oficial de la Junta de Castilla y León.
