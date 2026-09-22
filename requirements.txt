@@ -1,0 +1,23 @@
+# Dependencias de Python del pipeline (extracción, parsing, BD, enrichment,
+# estadística y gráficas). Instalar con: pip install -r requirements.txt
+#
+# src/statistics/test_centros.py, test_genero.py y test_ramasDep.py usan rpy2
+# para invocar R (necesitan una instalación de R en el sistema, no la cubre
+# este archivo).
+
+python-dotenv
+pymongo
+pandas
+numpy
+matplotlib
+seaborn
+scipy
+statsmodels
+scikit-learn
+sentence-transformers
+pdfplumber
+beautifulsoup4
+requests
+ddgs
+ollama
+rpy2

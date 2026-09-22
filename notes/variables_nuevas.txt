@@ -1,0 +1,31 @@
+Nº Investigadores contratados
+Si se contrataron o no
+
+Centro ->> universidades csic y otros
+
+numero de prfesores por universidad
+presupuesto de financiacion autoniomico por universidad
+
+cambiar top dinero a colores por la universidad
+
+Rama -> investigacion extra
+
+
+
+calculo de proporciones condicionadas, respecto a aceptadas suplentes
+
+en general usar barras, 
+
+p pequeñas en test de phisher < 0.05
+
+
+controln de la multiplicidad en el p valor en fisher por tablas, bon ferroni, 
+family wise error rate
+
+correlacion tau(t) de kendall para variables caracteristicas(genero, centro rama)
+
+test t de student(2) a-nova(+2)
+
+añadir datos de contratados, cantidad de dinero en no suvencionados(0)
+
+box mosaic, sankey, informationisbeutiful.com r-graph-galery
